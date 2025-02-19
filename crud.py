@@ -1,165 +1,142 @@
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
+from firebase_admin import firestore
 
-from orm_models.buget import Buget
 from orm_models.plati import Plata, Plata_pydantic
 from orm_models.users import Users, Users_pydantic
 
 # Creare utilizator
-def create_user(session: Session, user: Users_pydantic):
-    print("\tCreez un user")
-    db_user = user.get_db_obj()
-    try:
-        session.add(db_user)
-        session.commit()
-        session.refresh(db_user)
-        return db_user
-    except IntegrityError:
-        session.rollback()
-        raise ValueError("User with this email already exists")
-        
+def create_user(session, user: Users_pydantic):
+    print("\tCreaza un user")
+
+    if(user.dorinte + user.necesitati + user.economii != 100):
+        raise ValueError("Procentele nu insumeaza 100%")
+    
+    if(get_user_by_email(session, user.email)):
+        raise ValueError("Email-ul exista deja")
+
+    user_data = user.dict()
+    users_ref = session.collection('users')
+    last_user = users_ref.order_by('id', direction=firestore.Query.DESCENDING).limit(1).stream()
+    last_id = -1
+    for doc in last_user:
+        last_id = doc.to_dict().get('id', 0)
+    new_id = last_id + 1
+    user_data['id'] = new_id
+    user_ref = users_ref.document(str(user_data['id']))
+    user_ref.set(user_data)
+    return user_data
+
 # Obținerea unui utilizator după ID
-def get_user_by_id(session: Session, user_id: int):
+def get_user_by_id(session, user_id: int):
     print("\tIa un user dupa id")
-    return session.query(Users).filter(Users.id == user_id).first()
+    users_ref = session.collection('users')
+    query = users_ref.where('id', '==', user_id).stream()
+    for doc in query:
+        return doc.to_dict()
+    return None
 
 # Obținerea unui utilizator după email
-def get_user_by_email(session: Session, email: str):
+def get_user_by_email(session, email: str):
     print("\tIa un user dupa email")
-    return session.query(Users).filter(Users.email == email).first()
+    # return session.query(Users).filter(Users.email == email).first()
+    users_ref = session.collection('users')
+    query = users_ref.where('email', '==', email).stream()
+    for doc in query:
+        return doc.to_dict()
+    return None
 
 # Obținerea tuturor utilizatorilor
-def get_users(session: Session, skip: int = 0, limit: int = 100):
-    print("\tIa toti utilizatorii")
-    return session.query(Users).offset(skip).limit(limit).all()
+def get_users(session, skip: int = 0, limit: int = 100):
+    print("\tArata toti userii")
+    users_ref = session.collection('users')
+    users = [doc.to_dict() for doc in users_ref.stream()]
+    return users[skip:skip+limit]
 
 # Actualizare utilizator
-def update_user(session: Session, user_id: int, user_data: Users_pydantic):
-    print("\tActualizeaza un utilizator")
-    db_user = session.query(Users).filter(Users.id == user_id).first()
-    if db_user:
-        db_user.nume = user_data.nume
-        db_user.prenume = user_data.prenume
-        db_user.email = user_data.email
-        db_user.parola = user_data.parola
-        db_user.venit = user_data.venit
-        session.commit()
-        session.refresh(db_user)
-        return db_user
+def update_user(session, user_id: int, user_data: Users_pydantic):
+    print("\tActualizeaza un user dupa id")
+    users_ref = session.collection('users')
+    query = users_ref.where('id', '==', user_id).stream()
+    for doc in query:
+        user_ref = session.collection('users').document(doc.id)
+        user_ref.update(user_data.dict())
+        return user_data.dict()
     return None
 
 # Ștergere utilizator
-def delete_user(session: Session, user_id: int):
+def delete_user(session, user_id: int):
     print("\tSterge un user dupa id")
-    db_user = session.query(Users).filter(Users.id == user_id).first()
-    if db_user:
-        session.delete(db_user)
-        session.commit()
-        return db_user
-    return None
-
-# Creare buget
-def create_buget(session: Session, user_id: int, procent_necesitati: float, procent_dorinte: float, procent_economii: float):
-    print("\tCreeaza un buget")
-    # Obținem utilizatorul din baza de date pentru a accesa venitul
-    db_user = session.query(Users).filter(Users.id == user_id).first()
     
-    if db_user is None:
-        raise ValueError("Utilizatorul nu a fost gasit")
-    
-    if(procent_dorinte + procent_necesitati + procent_economii != 100):
-        raise ValueError("Procentele nu insumeaza 100%")
+    plati_ref = session.collection('plati'+str(user_id))
+    plati = [doc.to_dict() for doc in plati_ref.stream()]
+    for plata in plati:
+        delete_plata(session, plata['user_id'], plata['id'])
 
-    # Creăm bugetul și calculăm sumele pentru fiecare categorie pe baza veniturilor utilizatorului
-    db_buget = Buget(
-        user_id=user_id,
-        necesitati=procent_necesitati,
-        dorinte=procent_dorinte,
-        economii=procent_economii,
-    )
-    
-    session.add(db_buget)
-    session.commit()
-    session.refresh(db_buget)
-    return db_buget
-
-# Obținerea unui buget după user_id
-def get_buget_by_user(session: Session, user_id: int):
-    print("\tIa un buget dupa user_id")
-    return session.query(Buget).filter(Buget.user_id == user_id).first()
-
-# Actualizare buget
-def update_buget(session: Session, user_id: int, necesitati: float, dorinte: float, economii: float):
-    print("\tActualizeaza un buget")
-    db_buget = session.query(Buget).filter(Buget.user_id == user_id).first()
-    if db_buget:
-        db_buget.necesitati = necesitati
-        db_buget.dorinte = dorinte
-        db_buget.economii = economii
-        session.commit()
-        session.refresh(db_buget)
-        return db_buget
+    users_ref = session.collection('users')
+    query = users_ref.where('id', '==', user_id).stream()
+    for doc in query:
+        user_ref = session.collection('users').document(doc.id)
+        user_ref.delete()
+        return doc.to_dict()
     return None
 
 # Creare plată
 def create_plata(session: Session, plata: Plata_pydantic):
     print("\tCreeaza o plata")
-    db_plata = plata.get_db_obj()
-    session.add(db_plata)
-    session.commit()
-    session.refresh(db_plata)
-    return db_plata
+    plata_data = plata.dict()
+    plati_ref = session.collection('plati'+str(plata_data['user_id']))
+    last_plata = plati_ref.order_by('id', direction=firestore.Query.DESCENDING).limit(1).stream()
+    last_id = -1
+    for doc in last_plata:
+        last_id = doc.to_dict().get('id', 0)
+    new_id = last_id + 1
+    plata_data['id'] = new_id
+    plata_ref = plati_ref.document(str(plata_data['id']))
+    plata_ref.set(plata_data)
+    return plata_data
 
 # Obținerea plăților unui utilizator
 def get_plati_by_user(session: Session, user_id: int, skip: int = 0, limit: int = 100):
     print("\tArata platile unui user dupa user_id")
-    return session.query(Plata).filter(Plata.user_id == user_id).offset(skip).limit(limit).all()
+    plati_ref = session.collection('plati'+str(user_id))
+    plati = [doc.to_dict() for doc in plati_ref.stream()]
+    return plati[skip:skip+limit]
 
 # Obținerea unei plăți după ID
-def get_plata_by_id(session: Session, plata_id: int):
+def get_plata_by_id(session: Session,user_id:int, plata_id: int):
     print("\tIa o plata dupa id")
-    return session.query(Plata).filter(Plata.id == plata_id).first()
+    plati_ref = session.collection('plati'+str(user_id))
+    query = plati_ref.where('id', '==', plata_id).stream()
+    for doc in query:
+        return doc.to_dict()
+    return None
 
 # Actualizare plată
-def update_plata(session: Session, plata_id: int, suma: float, categorie: str, tip: str):
+def update_plata(session: Session, user_id:int, plata_id: int, plata_data: Plata_pydantic):
     print("\tActualizeaza o plata dupa id")
-    db_plata = session.query(Plata).filter(Plata.id == plata_id).first()
-    if db_plata:
-        db_plata.suma = suma
-        db_plata.categorie = categorie
-        db_plata.tip = tip
-        session.commit()
-        session.refresh(db_plata)
-        return db_plata
+    plata_ref = session.collection('plati'+str(user_id))
+    query = plata_ref.where('id', '==', plata_id).stream()
+    for doc in query:
+        plata_ref = session.collection('plati'+str(user_id)).document(doc.id)
+        plata_ref.update(plata_data.dict())
+        return plata_data.dict()
     return None
 
 # Ștergere plată
-def delete_plata(session: Session, plata_id: int):
+def delete_plata(session: Session, user_id: int, plata_id: int):
     print("\tSterge o plata dupa id")
-    db_plata = session.query(Plata).filter(Plata.id == plata_id).first()
-    if db_plata:
-        session.delete(db_plata)
-        session.commit()
-        return db_plata
+    plata_ref = session.collection('plati'+str(user_id))
+    query = plata_ref.where('id', '==', plata_id).stream()
+    for doc in query:
+        plata_ref = session.collection('plati'+str(user_id)).document(doc.id)
+        plata_ref.delete()
+        return doc.to_dict()
     return None
 
 def get_plati_pe_categorie(session: Session, user_id: int, categorie: str):
     print("\tAfisaza platile in functie de o categorie")
     # Obținem bugetul utilizatorului
-    db_buget = session.query(Buget).filter(Buget.user_id == user_id).first()
-    
-    if not db_buget:
-        raise ValueError(f"Nu există un buget pentru utilizatorul cu ID-ul {user_id}")
-    
-    # Verificăm dacă categoria este validă
-    if categorie not in ['necesitate', 'dorință', 'economii']:
-        raise ValueError("Categoria trebuie să fie 'necesitate', 'dorință' sau 'economii'")
-    
-    # Obținem plățile corespunzătoare categoriei din buget
-    plati = session.query(Plata).filter(and_(
-        Plata.user_id == user_id,
-        Plata.categorie == categorie
-        )).all()
-
+    plati_ref = session.collection('plati'+str(user_id))
+    plati = [doc.to_dict() for doc in plati_ref.where('categorie', '==', categorie).stream()]
     return plati

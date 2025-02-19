@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, DECIMAL
 
 from constants import SCHEMA
 from orm_models.base_model import BASE
@@ -11,16 +11,23 @@ class Users(BASE):
     id = Column(Integer, primary_key=True, autoincrement=True)
     nume = Column(String(50))
     prenume = Column(String(50))
-    email = Column(String(50), primary_key=True)
+    email = Column(String(50), unique=True)
     parola = Column(String(50))
     venit = Column(Integer)
+    necesitati = Column(Integer)
+    dorinte = Column(Integer)
+    economii = Column(Integer)
 
 class Users_pydantic(BaseModel):
+    id: int
     nume: str
     prenume: str
     email:str
     parola:str
     venit:int
+    necesitati:int
+    dorinte:int
+    economii:int
 
     def get_db_obj(self) -> Users:
         return Users(**self.model_dump())
