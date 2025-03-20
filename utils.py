@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import os
 
-cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), 'test-44edc-firebase-adminsdk-cakyn-75aec87cb6.json'))
+cred = credentials.Certificate(os.path.join(os.path.dirname(__file__), 'my-money-flow-4fd41-firebase-adminsdk-fbsvc-ea9a5a5f5c.json'))
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
