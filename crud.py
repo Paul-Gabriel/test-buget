@@ -9,7 +9,7 @@ from orm_models.users import Users, Users_pydantic
 def create_user(session, user: Users_pydantic):
     print("\tCreaza un user")
 
-    if(user.dorinte + user.necesitati + user.economii != 100):
+    if(user.procentDorinte + user.procentNecesitati + user.procentEconomii != 100):
         raise ValueError("Procentele nu insumeaza 100%")
     
     if(get_user_by_email(session, user.email)):

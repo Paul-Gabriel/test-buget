@@ -14,9 +14,9 @@ class Users(BASE):
     email = Column(String(50), unique=True)
     parola = Column(String(50))
     venit = Column(Integer)
-    necesitati = Column(Integer)
-    dorinte = Column(Integer)
-    economii = Column(Integer)
+    procentNecesitati = Column(Integer)
+    procentDorinte = Column(Integer)
+    procentEconomii = Column(Integer)
 
 class Users_pydantic(BaseModel):
     id: int
@@ -25,9 +25,9 @@ class Users_pydantic(BaseModel):
     email:str
     parola:str
     venit:int
-    necesitati:int
-    dorinte:int
-    economii:int
+    procentNecesitati:int
+    procentDorinte:int
+    procentEconomii:int
 
     def get_db_obj(self) -> Users:
         return Users(**self.model_dump())
